@@ -2,6 +2,7 @@
 import os
 import requests
 import datetime
+import getpass
 
 import pandas as pd
 
@@ -10,26 +11,6 @@ os.chdir(path)
 
 from debug import Debug
 
-###################################################
-
-def format_date(date_part):
-    """ if the length of date part is 1, 
-        we add prefix '0' 
-        returns -1 if """
-        
-    date_part = str(date_part)
-    
-    ln = len(date_part)
-    
-    if ln == 2:
-        return date_part
-    else:
-        if ln == 1:
-            return '0' + date_part
-        else:
-            print('input error in format_date function')
-            return -1
-            
 ###################################################
 
 def construct_row_from_source_line(line):
@@ -43,23 +24,23 @@ def construct_row_from_source_line(line):
         
         items_list = line.split(',')
         
-        result_list = [year, week]
-        
-        for item in items_list:
-            result_list.append(item.strip())
+        SMN = items_list[0].strip()
+        SMT = items_list[1].strip()
+        VCI = items_list[2].strip()
+        TCI = items_list[3].strip()
+        VHI = items_list[4].strip()
         
     except:
         return None
     
-    return result_list
+    return year, week, SMN, SMT, VCI, TCI, VHI
 
 ################################################### 
     
 
 def get_data(year1='1981',
              year2='2017',
-             province_id=1,
-             file_type=1):
+             province_id=1):
     """ fetch text data from web and save
         structured lines to file """
        
@@ -71,8 +52,6 @@ def get_data(year1='1981',
         province_id = str(province_id)
         
         # construct url using params
-        
-        
         url = 'https://www.star.nesdis.noaa.gov/smcd/emb/'
         url += 'vci/VH/get_provinceData.php?country=UKR&'
         url += 'provinceID='
@@ -82,20 +61,11 @@ def get_data(year1='1981',
         url += '&'
         url += 'year2='
         url += year2
+        url += '&type=Mean'
         
-        if file_type == 1:
-            url += '&type=Mean'
-            
-        else:
-            url += '&type=VHI_Parea'           
-            
     
         # get web page text
-        
-        
         r = requests.get(url, timeout=(60,60))
-        
-        
         txt = str(r.content)
         txt = txt.replace('\\n', '\n')
         
@@ -110,20 +80,27 @@ def get_data(year1='1981',
         minute = today.minute
         sec = today.second
         
-        # format date parts        
         month = str(month)
-        month = format_date(month)        
-        day = str(day)
-        day = format_date(day)       
-        hour = str(hour)
-        hour = format_date(hour)       
-        minute = str(minute)
-        minute = format_date(minute)        
-        sec = str(sec)
-        sec = format_date(sec)
+        if len(month) == 1:
+            month = '0' + month
             
-        fname += '_fileType' + str(file_type)
-        fname += '_loaded_date_' + str(year) + '-' 
+        day = str(day)
+        if len(day) == 1:
+            day = '0' + day
+            
+        hour = str(hour)
+        if len(hour) == 1:
+            hour = '0' + hour
+            
+        minute = str(minute)
+        if len(minute) == 1:
+            minute = '0' + minute
+            
+        sec = str(sec)
+        if len(sec) == 1:
+            sec = '0' + sec
+            
+        fname += 'loaded_date_' + str(year) + '-' 
         fname += month + '-' 
         fname += day + '_time_'
         fname += hour + '-'
@@ -131,30 +108,19 @@ def get_data(year1='1981',
         fname += sec + '.csv'
         
         # save data to file
-    
         f = open(fname, 'w')
+        f.write('year,week,SMN,SMT,VCI,TCI,VHI\n')
         
         txt_lines = txt.split('\n') 
         
-        if file_type == 1:                
-                
-            head = 'year,week,SMN,SMT,VCI,TCI,VHI\n'
-                      
-        else:
-            head = 'year,week,p0,p5,p10,p15,p20,p25,p30,p35,'
-            head += 'p40,p45,p50,p55,p60,p65,p70,p75,p80,p85,'                
-            head += 'p90,p95,p10\n'               
+        for line in txt_lines:
             
-        f.write(head)
-        
-        for line in txt_lines[1:-1]:
-            
-            # get values from line
-
-            items = construct_row_from_source_line(line)
-
+            # get values from line            
+            items = construct_row_from_source_line(line) 
             if not items: # if it is None
-                continue      
+                continue
+            
+            year, week, SMN, SMT, VCI, TCI, VHI = items
                
             # skip wrong lines             
             try:
@@ -181,45 +147,39 @@ def get_data(year1='1981',
     
 ###################################################
 
-def read_data_to_dataframe(fname, file_type=1):
+def read_data_to_dataframe(fname):
     """ loads the values from csv 
         to pandas dataframe
     """
-    
-    if file_type == 1:
-        columns_list = ['year', 'week', 'SMN', 'SMT', 
-                        'VCI', 'TCI', 'VHI']
-    
-    else:
-        columns_list = ['year','week','p0','p5','p10','p15','p20',
-                        'p25','p30','p35', 'p40','p45','p50','p55',
-                        'p60','p65','p70','p75','p80','p85','p90',
-                        'p95','p100']
 
     try:
-        f = open(path + '/' + fname, 'r')
+        f = open(fname, 'r')
         lines = f.readlines()
         f.close()
        
         d = dict()
         
-        for c in columns_list:
-            d[c] = []
-
+        d['year'] = []
+        d['week'] = []
+        d['SMN'] = []
+        d['SMT'] = []
+        d['VCI'] = []
+        d['TCI'] = []
+        d['VHI'] = []
         
         for line in lines[1:]:
-            
             items = line.split(',')
+            d['year'].append(int(items[0]))
+            d['week'].append(int(items[1]))
+            d['SMN'].append(float(items[2]))
+            d['SMT'].append(float(items[3]))
+            d['VCI'].append(float(items[4]))
+            d['TCI'].append(float(items[5]))
+            d['VHI'].append(float(items[6]))
             
-            for i in range(len(columns_list)):
-                if i < 2:
-                    d[columns_list[i]].append(int(items[i].strip()))
-                else:
-                    d[columns_list[i]].append(float(items[i].strip()))
-                    
-                    
         df = pd.DataFrame(d, 
-                          columns=columns_list)
+                          columns=['year', 'week', 'SMN',
+                                   'SMT', 'VCI', 'TCI', 'VHI'])
         
     except:
         Debug.print_exception_info()
@@ -325,9 +285,7 @@ def get_severe_drought_percentage(df):
 def get_moderate_drought_percentage(df):
     
     
-    df2 = df[df['VHI'] < 35]
-    
-    df2 = df2[df2['VHI'] > 15]
+    df2 = df[(15 < df['VHI'] < 35)]
     
     if df2.empty == False: # if is not empty
     
@@ -344,91 +302,50 @@ def get_moderate_drought_percentage(df):
 def get_vhi_given_range(df, from_, to):
     
     
-    df = df[df['VHI'] < to]
-    df = df[df['VHI'] > from_]
+    df = df[(from_ < df['VHI'] < to)]
     
     return df['VHI']
 
 ###################################################
 
 
-# GET DATA
 
-exists = 0
-fname1 = ''
-fname2 = ''
-
-files = os.listdir()
-for ff in files:
-    if ff.startswith('vhi_id'):
-        exists += 1
-        if 'fileType1' in ff:
-            fname1 = ff
-        if 'fileType2' in ff:
-            fname2 = ff
-
-if not exists:        
-            
-    res = get_data(year1=2016, year2=2017, file_type=1)
     
-    if res:
-        print('all is ok: 1')
-    else:
-        print('program was aborted (exception)')   
-        
-    
-    res = get_data(year1=2016, year2=2017, file_type=2)
-    
-    if res:
-        print('all is ok: 2')
-    else:
-        print('program was aborted (exception)')  
-    
+ #GET DATA
+res = get_data(year1=2016, year2=2017)
+if res:
+    print('all is ok')
+else:
+    print('program was aborted (exception)')   
  
 # READ DATA TO DATAFRAME
+#if getpass.getuser() == 'root':
+#    fname = 'vhi_id_1_2016_2017__loaded_date_2017-05-16_time_00-30-33.csv'
+#else:
+#    fname = 'vhi_id_1_2016_2017__loaded_date_2017-05-15_time_23-47-28.csv'
 
-if fname1:
+#df = read_data_to_dataframe(fname)
+#print(list(df.columns.values))
+#print(df[:10])
+  
+#print()
+#print('------------------')
 
-    df1 = read_data_to_dataframe(fname1)
-    
-    if not df1 is None:
-        print(list(df1.columns.values))
-        print(df1[:10])
-          
-        print()
-        print('------------------')
-    
-if fname2:
-    
-    df2 = read_data_to_dataframe(fname2, file_type=2)
-    
-    if not df2 is None:
-        print(list(df2.columns.values))
-        print(df2[:10])
-          
-        print()
-        print('------------------')
-    
-    
 # GET MIN, MAX VHI FROM GIVEN YEAR
-print(get_year_vhi_min_max(df1, '2016'))
-print(get_year_vhi_min_max(df1, '2017'))
+#print(get_year_vhi_min_max(df, '2016'))
+#print(get_year_vhi_min_max(df, '2017'))
 
 # GET VHI RANGE
-print()
-x = get_vhi_given_range(df1, 0, 100)
-if not x is None:
-    print(x[:10])
+#print()
+#get_vhi_given_range(df, 0, 100)
 
 # GET SEVERE DRAUGHT PERCENTAGE
-x = get_severe_drought_percentage(df1)
-if not x is None:
-    print('severe draught percentage: ', x[:10])
+#print('severe draught percentage: ', 
+#      get_severe_drought_percentage(df))
 
 # GET MODERATE DRAUGHT PERCENTAGE
-x = get_severe_drought_percentage(df1)
-if not x is None:
-    print('moderate draught percentage: ', x[:10])
+#print('moderate draught percentage: ', 
+#      get_severe_drought_percentage(df))
 
 
 
