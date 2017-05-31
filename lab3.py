@@ -82,8 +82,8 @@ def fill_dictionary_from_file(lines):
 
 
 usr = getpass.getuser()
-if usr == 'yuriy':
-    data_path = '/home/yuriy/data/'
+if usr == 'vlad':
+    data_path = '/home/vlad/data/'
 elif usr == 'root':
     data_path = '/root/data/'
 else:
